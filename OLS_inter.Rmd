@@ -1,0 +1,414 @@
+---
+title: "Group Project 3 From Correlation to Linear Regression"
+author: "Victoria Bolotova,  Elizaveta Vlasova,  Anastasia Stepanchuk"
+date: "18 05 2021"
+output:
+  html_document:
+    toc: true
+    toc_float: 
+      smooth_scroll: false
+    toc_depth: 2
+    code_folding: show
+    theme: journal
+    number_sections: true
+editor_options:
+  chunk_output_type: console
+---
+
+
+**Libraries and loading our data**
+
+```{r include=TRUE, message=FALSE, warning=FALSE}
+library(foreign)
+library(tidyverse)
+library(sjPlot)
+library(dplyr)
+library(ggplot2)
+library(kableExtra)
+library(psych)
+library(sjPlot)
+data_1 <- read.spss("ESS9e03.1_F1.sav")
+data_2 <- data_1 %>%
+  filter(cntry == "Finland")
+
+data_3 <- data_2 %>%
+  select(gndr, agea, happy, sclmeet, inprdsc, health, maritalb, bthcld,
+eduyrs, netinum, wkhtot, domicil, aesfdrk, stflife)
+data_3 = na.omit(data_3)
+
+data_3 <- data_3 %>%
+  mutate(agea=as.numeric(as.character(agea)),
+        netinum=as.numeric(as.character(netinum)),
+        eduyrs=as.numeric(as.character(eduyrs)),
+        happy=as.numeric(case_when(happy == "Extremely happy"~'10', 
+                                   happy == "9"~'9',happy=="8"~'8', 
+                                   happy=="7"~'7', happy=="6"~'6', 
+                                   happy=="5"~'5', happy=="4"~'4', 
+                                   happy=="3"~'3', happy=="2"~'2', 
+                                   happy=="1"~'1', happy=="0"~'0', 
+                                   happy=="Extremely unhappy"~'0', 
+                                   happy=="Refusal"~'Refusal', happy =="Don't 
+                                   know"~'Refusal')),
+        wkhtot=as.numeric(as.character(wkhtot)))
+```  
+
+**Renaming**
+
+```{r include = TRUE, message=FALSE, warning=FALSE}
+data_3 <- rename(data_3,
+  net_income = netinum,
+  age = agea,
+  gender = gndr,
+  years_of_education = eduyrs,
+  happiness = happy,
+  soc_life = sclmeet,
+  close_people = inprdsc,
+  marital_status = maritalb,
+  child = bthcld,
+  work_hours = wkhtot,
+  living_area = domicil,
+  safety = aesfdrk)
+  colnames(data_3)
+```
+
+**Contribution**
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+Team_member <- c("Victoria Bolotova", "Elizaveta Vlasova",  "Anastasia Stepanchuk")
+Contribution <- c("preparation of background information for hypotheses, building regression models, comparison of correlation and regression,  description of regression models, comparison of regression models, interpretation of the best model fit and its coefficients, collecting all the scripts in one and arranging the final layout", "preparation of the regression equation with all the coefficients, preparation of an output table with an sjPlot, working on the feedback to another team's project", "choice of topic and variables, hypotheses elaboration, preparation and analysis of descriptive statistics, running correlation tests, preparation of correlation matrix and its analysis")
+df <- data.frame(Team_member, Contribution)
+kable(df) %>% 
+  kable_styling(bootstrap_options=c("bordered", "responsive","striped"), full_width = TRUE)
+```
+
+# **Research topic**
+
+Is there a relationship between a person's income and his well-being? This topic is often raised in the researches of sociologists and economists, trying to answer this question. Some believe that such a correlation exists, some believe that there is no traceable relationship. For this reason, we decided to test this as a case in Finland. Is this connection as strong as we think it is? And what can affect the income and make it higher?
+
+Our team's hypotheses are as follows: 
+
+* H1: The higher a person's level of happiness, the higher is his income 
+
+Our hypothesis is based partly on our experience, but also relies on social research on this topic. For example, a recent study of The University of Pennsylvania's The Wharton School "Experienced well-being rises with income, even above $75,000 per year" (Killingsworth M, 2021). The researchers found that the relationship between income and happiness does exist - the higher the income, the higher the level of happiness. However, studies on the inverse relationship - the effect of the level of happiness on income growth - are much smaller, and our task is to find out whether income is a dependent value on the level of happiness.
+
+
+* H2: The more years of full-time education completed, the higher is an income of the person
+
+People who have more years of full-time education completed, probably have more specific "hard" skills that are valuable on labor market. On the contrary, people who do not dedicate their time to education, do not posses highly-qualified skills and knowledge, so they are engaged in unskilled labor, that is not well-paid.
+
+
+* H3: The more working hours a person has per week, the higher is his income
+
+This hypothesis turns out to be interesting for us to check in linear regression after reading the paper "Множественность подходов к типологии государства всеобщего благосостояния" (Сидорина Т. Ю, 2014). Finland is considered to have the social democratic model of the social welfare state (Finland is more close exactly to this model). According to this model, Finland is characterized by high level of decommodification (provision of social rights to a sufficient extent, regardless of employment status; social protection as a citizen's right). `net_income` measures net of the person as [pay/pensions/social benefits]. It means that we expect that `work_hours` affect `net_income` but to small extent because the government of Finland tries to provide everyone with welfare and social security, regardless of whether a person works or not, works a lot of hours or  small number of hours during a week. We expect that correlation will be small or medium between `work_hours` and `net_income` and we can explain not really a lot by our regression model, but we believe it is will be fruitful finding as we find out how close real representative sample data to the theory of welfare state and whether income of Finnish people depends on their working hours.
+
+
+* H4: Males tend to get higher income than females
+
+We have elaborated such hypothesis because women usually get lower salary than men due to gender discrimination, gender stereotypes, glass ceiling, etc. Also, women are engaged in child raising & care as well as care for elderly members of family, so they usually have less time to develop and boost their skills, so they work on poorly paid positions. Besides, many females do not work because household labor and child raising, so their income consists of social benefits, which are usually smaller than salaries. Finland is one of the countries that tries to reduce women's dependence on the family and create favorable conditions for their economic
+independence. However, we expect females get lower income than men. 
+
+# **Descriptive statistics**
+```{r include=TRUE, message=FALSE, warning=FALSE}
+data_4 <- data_3 %>%
+  select(net_income, years_of_education, happiness, work_hours)
+```
+
+First variable `income` is our continuous outcome which actually means your usual [weekly/monthly/annual] net [pay/pensions/social benefits]. Second variable is `years_of_education` - years of full-time education completed. Third variable `work_hours` means total hours normally worked per week in main job overtime included. The last continious variable (which was changed from factor to numeric) which is `happiness` implies how happy are you. 
+
+## Summary of the data:
+```{r include = TRUE, message=FALSE, warning=FALSE}
+summary(data_4)
+```
+
+Let's present descriptive statistics more detailed now.
+
+## Normality of the outcome variable:
+
+```{r}
+describe(data_4$net_income)
+```
+
+Skew and kurtosis are very huge, it is a significant indicator that normality assumption does not hold. 
+
+* H0: The distribution of income is normal.
+* H1: The distribution of income is not normal.
+```{r include = TRUE, message=FALSE, warning=FALSE}
+shapiro.test(data_4$net_income)
+```
+As we can see by the Shapiro-Wilk normality test, the p-value is less that 0,05 therefore we can reject our H0 and the income distribution is not normal. But we should remember that Shapiro-Wilk test is too conservative on large samples, so let run it with other variables, but recheck with other methods (visualization and skew & kurtosis)
+
+## Predictor variables:
+1. **Working hours**
+```{r include = TRUE, message=FALSE, warning=FALSE}
+ggplot(data_4, aes(x = work_hours)) +
+  geom_histogram(binwidth = 7, 
+                 fill = "skyblue3", 
+                 col= "skyblue4", 
+                 alpha = 3) + 
+  labs(title="The distribution of the working hours per week",
+       subtitle="Histogram",
+       x = "Working hours per week", 
+       y = "") +
+  geom_vline(aes(xintercept = mean(work_hours)), linetype="solid", color="brown") +
+  geom_vline(aes(xintercept = median(work_hours)), linetype="dashed", color="black", size=1) +
+  theme_classic()
+```
+
+We can see by the graph that data is not normal distributed, but there is a right-skewed distribution. Many people in Finland are working less than 38,87 per week. The mean is 38,87 and the median is 40. The maximum value is 140. 
+
+2. **Years of education**
+```{r include = TRUE, message=FALSE, warning=FALSE}
+ggplot(data_4, aes(x = years_of_education)) +
+  geom_histogram(binwidth = 7, 
+                 fill = "olivedrab3", 
+                 col= "olivedrab4", 
+                 alpha = 3) + 
+  labs(title="The distribution of the years of education",
+       subtitle="Histogram",
+       x = "Years of education", 
+       y = "Count") +
+  geom_vline(aes(xintercept = mean(years_of_education)), linetype="solid", color="brown") +
+  geom_vline(aes(xintercept = median(years_of_education)), linetype="dashed", color="black", size=1) +
+  theme_classic()
+```
+
+Years of education don't have normal distribution as well. It is right-skewed. Mostly, people study for less years that the mean value of 14,38 & The median value is 14 and the max value is 51. 
+
+```{r}
+describe(data_4$years_of_education)
+```
+
+Yes, wee see that both skew and kurtosis indicates non-normality.
+
+3. **Happiness**
+```{r include = TRUE, message=FALSE, warning=FALSE}
+ggplot() +
+  geom_histogram(data = data_4, aes(x = happiness), binwidth = 1, fill="thistle3", col="thistle4") +
+labs(y="Number of people", x="Happiness level",
+title="The level of happiness of people in Finland") +
+geom_vline(aes(xintercept = mean(data_3$happiness, na.rm = TRUE)), linetype="solid", color="black", size=1) +
+geom_vline(aes(xintercept = median(data_3$happiness)), linetype="solid", color="white", size=1) +
+theme_classic()
+```
+
+By the graph we can notice that there is no normal distribution again and the distribution is negatively skewed. We can say that more people evaluate their level of happiness in Finland higher than the mean value (8.192), median (8.00). 
+
+```{r}
+describe(data_4$happiness)
+```
+
+Yeah, wee see that both skew and kurtosis indicates non-normality.
+
+Let's recheck the normality of variables with the Shapiro-Wilk normality test to be sure.
+```{r include = TRUE, message=FALSE, warning=FALSE}
+shapiro.test(data_4$years_of_education)
+shapiro.test(data_4$happiness) 
+shapiro.test(data_4$work_hours) 
+```
+We can conclude, that all of our predictor variables are not normally distributed as the p < 0.05
+
+# **Correlation matrix**
+
+As we don't have variables that are normally distributed, we better use Spearman's correlation test instead of the Pearson's test. 
+
+- 1st pair of hypotheses:
+  - H0: The correlation coefficient between income and years of education is not significantly different from zero
+  - H1: The correlation coefficient between income and years of education is significantly different from zero.
+
+- 2nd pair of hypotheses:
+  - H0: The correlation coefficient between income and level of happiness is not significantly different from zero
+  - H1: The correlation coefficient between income and level of happiness is significantly different from zero. 
+
+- 3rd pair of hypotheses:
+  - H0: The correlation coefficient between income and working hours is not significantly different from zero
+  - H1: The correlation coefficient between income and working hours is significantly different from zero.
+  
+```{r include = TRUE, message=FALSE, warning=FALSE}
+cor.test(as.numeric(data_4$net_income), as.numeric(data_4$years_of_education), method = "spearman")
+cor.test(as.numeric(data_4$net_income), as.numeric(data_4$happiness), method = "spearman")
+cor.test(as.numeric(data_4$net_income), as.numeric(data_4$work_hours), method = "spearman")
+```
+
+We can see, that all our p-values are less than 0,05 -> we reject our null hypotheses and conclude that there is a statistical significance between those variables. Now for easier perception, we create a correlation matrix.
+
+```{r include = TRUE, message=FALSE, warning=FALSE}
+cor(data_4, method = "spearman", use = "complete.obs")
+```
+
+Now we see that there is a positive correlation between all variables with income: small correlation between the income and happiness, bigger correlation between income and working hours and medium correlation between income and years of education. We are going to use working hours as a predictor in our regression model. We have tried to keep going with years of education as the strongest covariate, but we have faced many issues with it, so it is more reliable to continue with working hours. 
+
+## Boxplot for the categorical predictor and the outcome
+
+Let's now consider connection between the income of respondents and their gender
+```{r include = TRUE, message=FALSE, warning=FALSE}
+data_3$gender <- factor(data_3$gender)
+ggplot(filter(data_3, !is.na(gender)), aes(x = gender, y = net_income)) +
+  geom_boxplot(fill="lightpink3", col="lightpink4", alpha = 0.6) +
+  xlab("Gender") + 
+  ylab("Income") +
+  ggtitle("Income of people depending on the gender") + theme_classic() + guides(fill=F)
+```
+
+As we can see by the boxplot, among males there are more outliers with higher income than the mean value. However, as the distribution of income is very skewed, it is hard to compare mean values of the income between genders. 
+
+Let's investigate these relationship further now. 
+
+# **Regression model**
+
+## Visualization of the first model
+
+
+```{r include = TRUE, message=FALSE, warning=FALSE}
+ggplot(data_3, aes(x = work_hours, y = net_income)) +
+  geom_point(color = "skyblue4") +
+  geom_smooth(method = "lm", se = FALSE, color = "purple4") +
+  labs(subtitle="Work hours VS Income", 
+       y="Income", 
+       x="Total hours normally worked per week", 
+       title="Scatterplot") +
+  theme_classic()
+  
+```
+
+The transformation of the variable `net_income`is needed as it is a large scale and we want to make it comparable to actually see the relationship and make it easily perceived. 
+
+```{r}
+data_3$income_log10 <- log(data_3$net_income + 1)
+```
+
+```{r include = TRUE, message=FALSE, warning=FALSE}
+ggplot(data_3, aes(x = work_hours, y = income_log10)) +
+  geom_point(color = "olivedrab4") +
+  geom_smooth(method = "lm", se = FALSE, color = "black") +
+  labs(subtitle="Work hours VS Income", 
+       y="Income", 
+       x="Total hours normally worked per week", 
+       title="Scatterplot") +
+  theme_classic()
+  
+```
+
+The second graph, which is green one, is more understandable. We see a positive linear relationship between `work_hours` and `net_income`. According to correlation matrix, the correlation is weak (=0.2831655). 
+
+
+## First linear regression model with one continious predictor 
+
+Owing to this model, we are going to predict income of a person by hours worked per week. 
+
+```{r}
+model1 <- lm(net_income ~ work_hours, data = data_4)
+summary(model1) 
+```
+
+
+* From the summary of our model we see that the model is significant fit to the data, as F-statistics shows the p-value (=9.624e-07) much smaller than 0.05.It means that changes in the independent variable are associated with changes in the dependent variable at the population level and we have enough evidence to conclude that non-zero correlation exists. Probably, we should continue to work with the `work_hours`as the predictor in our model, although small R-squared.
+
+* As for  Adjusted R-squared, it is equals to 0.01549 , which means that only 1.5 % of variance in income of people in Finland can be explained by our first model. It is below the satisfactory predictive power (0.1). It seems to prove that government of Finland tries to provide everyone with welfare and social security, regardless of whether a person works or not, works a lot of hours or  small number of hours during a week.
+
+*  Residual standard error is 10960 on 1474 degrees of freedom, which indicates how well a linear regression model fits the data. It is the difference between the observed income of finns and income of finns predicted by the model1. 
+
+* Correlation coefficient VS the regression coefficient VS R-squared.
+
+Well, correlation coefficient is equal to 0.2831655, which is small correlation, meanwhile regression coefficient is 118.2746 . These two measures are different as correlation measures the degree of a relationship between working hours and income, whereas regression measures how working hours affect income. R-squared (i.e. coefficient of determination) equals to 0.01549 it shows the relation of variance explained by the first model to total variance of the outcome variable `net_income`.
+
+We have tried to use here `income_log10`, but we have decided that it will complicate our interpretation of the result. So, let's proceed to next step.
+
+
+**Interpretation of coefficients**
+
+
+```{r}
+coef(model1)
+```
+
+As we can see the intercept value is -481.7372, while the slope value is 118.2476. 
+
+It means that for every additional hour worked per week we can expect income to increase by an average of 118 dollars (holding everything else constant). We would not interpret the intercept as it is negative and has no meaning. 
+
+## Visualization of the second model
+
+```{r include = TRUE, message=FALSE, warning=FALSE}
+ggplot(data_3, 
+       aes(x = work_hours, y = income_log10)) +
+  geom_point(aes(color = gender)) + 
+  geom_smooth(method = "lm", 
+              se = FALSE, 
+              color = "black") +
+  facet_wrap(~gender) +
+  labs(subtitle="Work hours VS Income", 
+       y="Income", 
+       x="Total hours normally worked per week", 
+       col = "Gender",
+       title="Scatterplot") +
+  theme_bw()
+```
+
+From these two scatter plots, we see that lines have different slopes. It seems that male group has steeper slope. 
+
+## Second model - Additive linear regression model
+
+```{r}
+data_5 <- data_3 %>%
+  select(work_hours, gender, net_income)
+model2 <- lm(net_income ~ work_hours + gender, data = data_5)
+summary(model2)
+```
+
+* From the summary of our model, we see that p-value equals 1.503e-12, which is less than 0.05, it means that the model is significant fit to the data. 
+
+* As for  Adjusted R-squared, it is equals to 0.03498, which means that 3,5 % of variance in income of people in Finland can be explained by our second model. This percent of explained variance is bigger compared with first model (1.5%). 
+
+# **Compare the model fit**
+
+Now we should compare our two models to decide which one fits better to the data.
+
+```{r}
+anova(model1, model2)
+```
+
+From ANOVA testing wee see small p-value (3.438e-08), which is less than 0.05, which means that we can conclude that model2 is significantly better at predicting income of the people in Finland. Also, we can see that RSS is very huge in both models, but for the second one it is smaller, it means that we can explain more with second model.
+
+# **Interpretation of the best model fit**
+
+As we found out the second model is significantly better fits the data, so let's look at it once again.
+
+```{r}
+summary(model2)
+```
+
+* p-value is less than 0.05 (1.503e-12), it means that our model significantly fits our data. (just to recall once again)
+
+* Adjusted R-squared is 0.03498, it means that 3,5% of variance in income of people in Finland can be explained by our second model (i.e. knowing the working hours and the gender of the person).
+
+* Residual standard error is 10850, it indicates the difference between the observed income of finns and income of finns predicted by the model2. 
+
+* Residuals' median is really big one (-1521). It shows the difference between the observed value of the income (y) and the predicted value of income (ŷ). 
+It means that our model is not really good at explaining the data. 
+
+* In this model continuous and categorical variables are significant according to the p-values smaller than 0.05. It means that corresponding coefficients (estimate column) are probably not equal to 0 in the population. 
+
+* Estimate here is a regression coefficients, let us interpret what do they mean to us in the next step.
+
+# **Interpretation of the coefficients**
+
+**Work hours:** For each hour worked the predicted income is 91 dollars higher, on average, holding everything else constant.
+
+**Gender:** Females would have 3201 dollars smaller income, on average, holding everything else constant.
+
+Well, intercept here is positive, so probably we can interpret it. The predicted income is 2213, if the person works 0 hours and is male. We can assume that such result is possible because sample contains representatives of retirees who get income in the form of pensions and do not not work. And our variable `net_income` measures not only salary, but social benefits too. Therefore, the theory of welfare state and its country division by types of welfare state seems to reflect the reality: the government of Finland tries to provide everyone with welfare and social security, regardless of whether a person works or not, works a lot of hours or  small number of hours during a week.
+Also, we suppose that interaction effect of gender will work better, as gender probably moderates the relationship between working hours and income. We hope to check it in the next project.
+
+# **Regression equation with all the coefficients**
+
+
+$net_income = 2213.33 +90.96∗work_hours+(-3201.55)∗gender(Female)$
+
+# **Final table**
+
+```{r}
+sjPlot::tab_model(model2)
+```
+
+So, in our model, where the dependent variable is income, and the predictors are working hours and gender of the person, we have 1476 observations and correlation is significant for all variables, since the p-values of these variables are less than 0.05. In accordance with R2 adjusted, 3.5 % of variance in income of people in Finland can be explained by our second model, the model of best fit. 
+
+**That's the end of third project!**
